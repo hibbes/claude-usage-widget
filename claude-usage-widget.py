@@ -9,6 +9,7 @@ Requirements: Python 3, GTK3 (python3-gi, python3-gi-cairo)
 License: MIT
 """
 
+import glob
 import json
 import math
 import os
@@ -28,6 +29,8 @@ from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
 
 CONFIG_DIR = Path.home() / ".config" / "claude-usage-widget"
 COOKIE_FILE = CONFIG_DIR / "cookie"
+CONKY_FILE = CONFIG_DIR / "conky.txt"
+CLAUDE_DIR = Path.home() / ".claude"
 ICON_SIZE = 22
 REFRESH_SECONDS = 60
 API_BASE = "https://claude.ai/api"
@@ -62,6 +65,99 @@ def format_reset(iso_str):
         return f"{minutes}m"
     except (ValueError, TypeError):
         return "?"
+
+
+def read_local_sessions():
+    """Read token usage from local Claude Code session JSONL files.
+
+    Returns dict with:
+      today_tokens: total tokens used today (all sessions)
+      active_session: dict with tokens, duration_min, tokens_per_min for newest session
+    """
+    projects_dir = CLAUDE_DIR / "projects"
+    if not projects_dir.exists():
+        return None
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_tokens = 0
+    active_session = None
+    active_mtime = 0
+
+    for jsonl in projects_dir.rglob("*.jsonl"):
+        try:
+            mtime = jsonl.stat().st_mtime
+            mdate = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d")
+            if mdate != today:
+                continue
+
+            session_in = session_out = session_cache_r = session_cache_c = 0
+            first_ts = last_ts = None
+
+            with open(jsonl) as f:
+                for line in f:
+                    try:
+                        d = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if d.get("type") == "assistant" and "message" in d:
+                        u = d["message"].get("usage", {})
+                        if u:
+                            session_in += u.get("input_tokens", 0)
+                            session_out += u.get("output_tokens", 0)
+                            session_cache_r += u.get("cache_read_input_tokens", 0)
+                            session_cache_c += u.get("cache_creation_input_tokens", 0)
+                    # Track timestamps from any message type
+                    ts = d.get("timestamp")
+                    if ts:
+                        if first_ts is None or ts < first_ts:
+                            first_ts = ts
+                        if last_ts is None or ts > last_ts:
+                            last_ts = ts
+
+            total = session_in + session_out + session_cache_r + session_cache_c
+            today_tokens += total
+
+            if mtime > active_mtime and total > 0:
+                active_mtime = mtime
+                duration_min = 0
+                if first_ts and last_ts:
+                    # Timestamps are ISO strings or epoch ms
+                    try:
+                        if isinstance(first_ts, str):
+                            t0 = datetime.fromisoformat(first_ts).timestamp()
+                            t1 = datetime.fromisoformat(last_ts).timestamp()
+                        else:
+                            t0 = first_ts / 1000 if first_ts > 1e12 else first_ts
+                            t1 = last_ts / 1000 if last_ts > 1e12 else last_ts
+                        duration_min = max(1, (t1 - t0) / 60)
+                    except (ValueError, TypeError):
+                        duration_min = 0
+
+                active_session = {
+                    "tokens": total,
+                    "input": session_in,
+                    "output": session_out,
+                    "cache_read": session_cache_r,
+                    "cache_create": session_cache_c,
+                    "duration_min": duration_min,
+                    "tokens_per_min": round(total / duration_min) if duration_min > 0 else 0,
+                }
+        except (OSError, PermissionError):
+            continue
+
+    return {
+        "today_tokens": today_tokens,
+        "active_session": active_session,
+    }
+
+
+def format_tokens(n):
+    """Format token count as human-readable string."""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.0f}K"
+    return str(n)
 
 
 def severity_color(pct):
@@ -166,17 +262,61 @@ class ClaudeUsageWidget:
             if data:
                 self.usage_data = data
                 self.error_msg = None
-                self.update_icon()
         except urllib.error.HTTPError as e:
             if e.code == 403:
                 self.error_msg = "Auth expired — update cookie"
             else:
                 self.error_msg = f"HTTP {e.code}"
-            self.update_icon()
         except Exception as e:
             self.error_msg = str(e)
-            self.update_icon()
+
+        # Always refresh local session data (works without API)
+        try:
+            self.local_data = read_local_sessions()
+        except Exception:
+            self.local_data = None
+
+        self.update_icon()
+        self.write_conky()
         return True  # keep timer running
+
+    def write_conky(self):
+        """Write usage data to a file for conky to read."""
+        try:
+            lines = {}
+            d = self.usage_data
+            if d:
+                five = d.get("five_hour")
+                if five:
+                    lines["session_pct"] = f"{five['utilization']:.0f}"
+                    lines["session_reset"] = format_reset(five.get("resets_at"))
+                seven = d.get("seven_day")
+                if seven:
+                    lines["weekly_pct"] = f"{seven['utilization']:.0f}"
+                    lines["weekly_reset"] = format_reset(seven.get("resets_at"))
+                extra = d.get("extra_usage")
+                if extra and extra.get("is_enabled"):
+                    lines["extra_pct"] = f"{extra['utilization']:.0f}"
+                    lines["extra_used"] = f"{extra['used_credits'] / 100:.0f}"
+                    lines["extra_limit"] = f"{extra['monthly_limit'] / 100:.0f}"
+
+            local = getattr(self, "local_data", None)
+            if local:
+                sess = local.get("active_session")
+                if sess:
+                    lines["session_tokens"] = format_tokens(sess["tokens"])
+                    lines["tokens_per_min"] = format_tokens(sess["tokens_per_min"])
+                    lines["session_duration"] = f"{sess['duration_min']:.0f}"
+                lines["today_tokens"] = format_tokens(local.get("today_tokens", 0))
+
+            if self.error_msg:
+                lines["error"] = self.error_msg
+
+            CONKY_FILE.write_text(
+                "\n".join(f"{k}={v}" for k, v in lines.items()) + "\n"
+            )
+        except Exception:
+            pass
 
     def peak_utilization(self):
         """Return the highest utilization value."""
@@ -239,6 +379,21 @@ class ClaudeUsageWidget:
             limit = extra["monthly_limit"] / 100
             lines.append(f"Extra Usage:   {make_bar(pct, 14)} {pct:4.0f}%  ${used:.0f}/${limit:.0f}")
 
+        # Local session stats
+        local = getattr(self, "local_data", None)
+        if local:
+            lines.append("━" * 32)
+            sess = local.get("active_session")
+            if sess:
+                tpm = sess["tokens_per_min"]
+                dur = sess["duration_min"]
+                tok = format_tokens(sess["tokens"])
+                lines.append(f"This session:  {tok} tokens, {dur:.0f} min")
+                lines.append(f"Speed:         {format_tokens(tpm)} tokens/min")
+            today = local.get("today_tokens", 0)
+            if today:
+                lines.append(f"Today total:   {format_tokens(today)} tokens")
+
         return "\n".join(lines)
 
     def update_icon(self):
@@ -250,8 +405,69 @@ class ClaudeUsageWidget:
         self.icon.set_tooltip_text(self.build_tooltip())
 
     def on_left_click(self, icon):
-        """Left click: refresh immediately."""
+        """Left click: show usage popup."""
         self.refresh()
+        self.show_popup()
+
+    def show_popup(self):
+        """Show a small popup window with usage details."""
+        # Close existing popup if any
+        if hasattr(self, "_popup") and self._popup:
+            self._popup.destroy()
+
+        win = Gtk.Window(type=Gtk.WindowType.POPUP)
+        win.set_decorated(False)
+        win.set_resizable(False)
+        win.set_keep_above(True)
+        win.set_type_hint(Gdk.WindowTypeHint.TOOLTIP)
+
+        frame = Gtk.Frame()
+        frame.set_shadow_type(Gtk.ShadowType.OUT)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.set_margin_top(8)
+        box.set_margin_bottom(8)
+        box.set_margin_start(10)
+        box.set_margin_end(10)
+
+        text = self.build_tooltip()
+        label = Gtk.Label()
+        label.set_markup(f"<tt>{GLib.markup_escape_text(text)}</tt>")
+        label.set_justify(Gtk.Justification.LEFT)
+        label.set_halign(Gtk.Align.START)
+        box.pack_start(label, False, False, 0)
+
+        frame.add(box)
+        win.add(frame)
+        win.show_all()
+
+        # Position above the click point (tray is at bottom)
+        display = Gdk.Display.get_default()
+        seat = display.get_default_seat()
+        _, x, y = seat.get_pointer().get_position()
+        win_width, win_height = win.get_size()
+        screen = Gdk.Screen.get_default()
+        screen_width = screen.get_width()
+
+        # Place above cursor, keep on screen
+        popup_x = min(x - win_width // 2, screen_width - win_width - 5)
+        popup_x = max(5, popup_x)
+        popup_y = y - win_height - 10
+        if popup_y < 5:
+            popup_y = y + 10  # fallback: below cursor
+        win.move(popup_x, popup_y)
+
+        self._popup = win
+
+        # Auto-close after 5 seconds or on click
+        win.connect("button-press-event", lambda *_: win.destroy())
+        GLib.timeout_add(15000, self._close_popup)
+
+    def _close_popup(self):
+        if hasattr(self, "_popup") and self._popup:
+            self._popup.destroy()
+            self._popup = None
+        return False
 
     def on_right_click(self, icon, button, time):
         """Right click: show context menu."""
