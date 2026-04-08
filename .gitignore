@@ -1,0 +1,6 @@
+cookie
+*.cookie
+__pycache__/
+*.pyc
+.env
+*.secret
