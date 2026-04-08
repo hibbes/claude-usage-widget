@@ -320,18 +320,24 @@ class ClaudeUsageWidget:
             pass
 
     def peak_utilization(self):
-        """Return the highest utilization value."""
+        """Return the utilization value for the icon color.
+
+        Focus on session + weekly limits. Only show extra usage
+        when session or weekly has hit 100% (rate-limited).
+        """
         if not self.usage_data:
             return 0
-        values = []
+        primary = []
         for key in ("five_hour", "seven_day"):
             entry = self.usage_data.get(key)
             if entry:
-                values.append(entry["utilization"])
-        extra = self.usage_data.get("extra_usage")
-        if extra and extra.get("is_enabled"):
-            values.append(extra["utilization"])
-        return max(values) if values else 0
+                primary.append(entry["utilization"])
+        peak = max(primary) if primary else 0
+        if peak >= 100:
+            extra = self.usage_data.get("extra_usage")
+            if extra and extra.get("is_enabled"):
+                return extra["utilization"]
+        return peak
 
     def build_tooltip(self):
         """Build the tooltip text."""
