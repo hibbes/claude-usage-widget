@@ -18,7 +18,27 @@ The tray icon changes color based on your highest utilization:
 - 🟡 Yellow: 50–80%
 - 🔴 Red: > 80%
 
-Hover for a detailed breakdown. Left-click to refresh. Right-click for menu.
+Left-click the tray icon for a detail popup. Right-click for menu.
+
+### Local session stats
+
+Reads your local Claude Code session files to show:
+- **Tokens used** in the active session
+- **Tokens per minute** throughput
+- **Today's total** across all sessions
+
+### Conky integration
+
+Exports all data to `~/.config/claude-usage-widget/conky.txt` for use in [Conky](https://github.com/brndnmtthws/conky) dashboards. Add to your `conky.conf`:
+
+```lua
+${exec awk -F= '/^session_pct=/{print $2}' ~/.config/claude-usage-widget/conky.txt}%
+${exec awk -F= '/^weekly_pct=/{print $2}' ~/.config/claude-usage-widget/conky.txt}%
+${exec awk -F= '/^extra_display=/{print $2}' ~/.config/claude-usage-widget/conky.txt}
+${exec awk -F= '/^tokens_per_min=/{print $2}' ~/.config/claude-usage-widget/conky.txt}/min
+```
+
+Available keys: `session_pct`, `session_reset`, `weekly_pct`, `weekly_reset`, `extra_pct`, `extra_used`, `extra_limit`, `extra_display`, `session_tokens`, `tokens_per_min`, `session_duration`, `today_tokens`.
 
 ## Requirements
 
@@ -87,8 +107,10 @@ claude-usage-widget
 
 - Calls `claude.ai/api/organizations/{org_id}/usage` every 60 seconds
 - Auto-detects your organization ID on first run
+- Reads local Claude Code session JSONL files for token throughput stats
 - Renders a color-coded icon with the peak utilization percentage
-- Tooltip shows all limits with progress bars and reset countdowns
+- Click popup shows all limits with progress bars and reset countdowns
+- Writes `conky.txt` for desktop dashboard integration
 - Zero external dependencies beyond GTK3
 
 ## Security

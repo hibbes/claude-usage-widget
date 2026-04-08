@@ -299,6 +299,7 @@ class ClaudeUsageWidget:
                     lines["extra_pct"] = f"{extra['utilization']:.0f}"
                     lines["extra_used"] = f"{extra['used_credits'] / 100:.0f}"
                     lines["extra_limit"] = f"{extra['monthly_limit'] / 100:.0f}"
+                    lines["extra_display"] = f"${extra['used_credits'] / 100:.0f}/${extra['monthly_limit'] / 100:.0f}"
 
             local = getattr(self, "local_data", None)
             if local:
