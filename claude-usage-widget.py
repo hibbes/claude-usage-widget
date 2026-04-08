@@ -31,7 +31,7 @@ CONFIG_DIR = Path.home() / ".config" / "claude-usage-widget"
 COOKIE_FILE = CONFIG_DIR / "cookie"
 CONKY_FILE = CONFIG_DIR / "conky.txt"
 CLAUDE_DIR = Path.home() / ".claude"
-ICON_SIZE = 22
+ICON_SIZE = 32
 REFRESH_SECONDS = 60
 API_BASE = "https://claude.ai/api"
 USER_AGENT = (
@@ -186,7 +186,7 @@ def draw_icon(pct):
     # Percentage text
     ctx.set_source_rgba(1, 1, 1, 1)
     text = str(round(pct))
-    font_size = 9 if pct < 100 else 7.5
+    font_size = 14 if pct < 100 else 11
     ctx.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
     ctx.set_font_size(font_size)
     extents = ctx.text_extents(text)
