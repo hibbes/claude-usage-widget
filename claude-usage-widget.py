@@ -31,7 +31,7 @@ CONFIG_DIR = Path.home() / ".config" / "claude-usage-widget"
 COOKIE_FILE = CONFIG_DIR / "cookie"
 CONKY_FILE = CONFIG_DIR / "conky.txt"
 CLAUDE_DIR = Path.home() / ".claude"
-ICON_SIZE = 32
+ICON_SIZE = 22
 REFRESH_SECONDS = 60
 API_BASE = "https://claude.ai/api"
 USER_AGENT = (
@@ -176,22 +176,40 @@ def draw_icon(pct):
 
     r, g, b = severity_color(pct)
 
-    # Background circle
-    cx, cy = ICON_SIZE / 2, ICON_SIZE / 2
-    radius = ICON_SIZE / 2 - 1
-    ctx.arc(cx, cy, radius, 0, 2 * math.pi)
-    ctx.set_source_rgba(r, g, b, 0.9)
+    # Background — full square with rounded corners for max space
+    radius = 4
+    w, h = ICON_SIZE, ICON_SIZE
+    ctx.new_sub_path()
+    ctx.arc(w - radius, radius, radius, -math.pi / 2, 0)
+    ctx.arc(w - radius, h - radius, radius, 0, math.pi / 2)
+    ctx.arc(radius, h - radius, radius, math.pi / 2, math.pi)
+    ctx.arc(radius, radius, radius, math.pi, 3 * math.pi / 2)
+    ctx.close_path()
+    ctx.set_source_rgba(r, g, b, 0.95)
     ctx.fill()
 
-    # Percentage text
-    ctx.set_source_rgba(1, 1, 1, 1)
+    # Percentage text — fill as much of the square as possible
     text = str(round(pct))
-    font_size = 14 if pct < 100 else 11
     ctx.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-    ctx.set_font_size(font_size)
-    extents = ctx.text_extents(text)
-    ctx.move_to(cx - extents.width / 2 - extents.x_bearing,
-                cy - extents.height / 2 - extents.y_bearing)
+
+    # Auto-size: try large, shrink until it fits
+    for font_size in (16, 14, 12, 10):
+        ctx.set_font_size(font_size)
+        extents = ctx.text_extents(text)
+        if extents.width <= w - 4 and extents.height <= h - 4:
+            break
+
+    # Draw text shadow for contrast
+    cx, cy = w / 2, h / 2
+    tx = cx - extents.width / 2 - extents.x_bearing
+    ty = cy - extents.height / 2 - extents.y_bearing
+    ctx.set_source_rgba(0, 0, 0, 0.4)
+    ctx.move_to(tx + 1, ty + 1)
+    ctx.show_text(text)
+
+    # Draw text
+    ctx.set_source_rgba(1, 1, 1, 1)
+    ctx.move_to(tx, ty)
     ctx.show_text(text)
 
     # Convert to pixbuf
