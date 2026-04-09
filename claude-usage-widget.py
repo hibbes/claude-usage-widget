@@ -170,11 +170,17 @@ def severity_color(pct):
 
 
 def draw_icon(pct):
-    """Draw a tray icon with the peak utilization percentage."""
+    """Draw a tray icon with the peak utilization percentage.
+
+    If pct is None, draws a dash (offline/not connected).
+    """
     surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, ICON_SIZE, ICON_SIZE)
     ctx = cairo.Context(surface)
 
-    r, g, b = severity_color(pct)
+    if pct is None:
+        r, g, b = (0.5, 0.5, 0.5)  # gray for offline
+    else:
+        r, g, b = severity_color(pct)
 
     # Background — full square with rounded corners for max space
     radius = 4
@@ -189,7 +195,7 @@ def draw_icon(pct):
     ctx.fill()
 
     # Percentage text — fill as much of the square as possible
-    text = str(round(pct))
+    text = "—" if pct is None else str(round(pct))
     ctx.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
 
     # Auto-size: try large, shrink until it fits
@@ -227,7 +233,7 @@ class ClaudeUsageWidget:
         self.icon.set_tooltip_text("Claude Usage Widget\nLoading...")
         self.icon.connect("popup-menu", self.on_right_click)
         self.icon.connect("activate", self.on_left_click)
-        self.icon.set_from_pixbuf(draw_icon(0))
+        self.icon.set_from_pixbuf(draw_icon(None))
         self.icon.set_visible(True)
 
         self.refresh()
@@ -421,11 +427,18 @@ class ClaudeUsageWidget:
 
         return "\n".join(lines)
 
+    def session_utilization(self):
+        """Return the 5-hour session utilization percentage."""
+        if not self.usage_data:
+            return 0
+        five = self.usage_data.get("five_hour")
+        return five["utilization"] if five else 0
+
     def update_icon(self):
         """Update tray icon color and tooltip."""
-        pct = self.peak_utilization()
-        if self.error_msg:
-            pct = 100  # show red on error
+        pct = self.session_utilization()
+        if self.error_msg or not self.usage_data:
+            pct = None  # show dash when offline/error
         self.icon.set_from_pixbuf(draw_icon(pct))
         self.icon.set_tooltip_text(self.build_tooltip())
 

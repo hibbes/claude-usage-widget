@@ -13,7 +13,7 @@ System tray widget that shows your [Claude AI](https://claude.ai) usage limits a
 - **Model-specific limits** — Opus, Sonnet weekly caps (when applicable)
 - **Extra usage** — dollar amount used vs. monthly cap
 
-The tray icon changes color based on your highest utilization:
+The tray icon always shows your **session (5h) utilization** percentage and changes color accordingly:
 - 🟢 Green: < 50%
 - 🟡 Yellow: 50–80%
 - 🔴 Red: > 80%
@@ -108,7 +108,7 @@ claude-usage-widget
 - Calls `claude.ai/api/organizations/{org_id}/usage` every 60 seconds
 - Auto-detects your organization ID on first run
 - Reads local Claude Code session JSONL files for token throughput stats
-- Renders a color-coded icon with the peak utilization percentage
+- Renders a color-coded icon with the session (5h) utilization percentage
 - Click popup shows all limits with progress bars and reset countdowns
 - Writes `conky.txt` for desktop dashboard integration
 - Zero external dependencies beyond GTK3
