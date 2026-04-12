@@ -1,35 +1,33 @@
 # claude-usage-widget
 
-System tray widget that shows your [Claude AI](https://claude.ai) usage limits at a glance.
+Headless daemon that fetches your [Claude AI](https://claude.ai) usage limits and writes them to a file for desktop dashboards (Conky, Waybar, etc.).
 
 ![Python](https://img.shields.io/badge/python-3.8+-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Linux-lightgrey)
 
-## What it shows
+## What it does
 
-- **Session limit (5h)** — current utilization with reset countdown
-- **Weekly limit (7d)** — overall weekly usage
-- **Model-specific limits** — Opus, Sonnet weekly caps (when applicable)
-- **Extra usage** — dollar amount used vs. monthly cap
+A small Python daemon polls `claude.ai/api/organizations/{org_id}/usage` every 60 seconds and writes key=value pairs to `~/.config/claude-usage-widget/conky.txt`. Your desktop bar or Conky panel reads that file and displays the values however you like.
 
-The tray icon always shows your **session (5h) utilization** percentage and changes color accordingly:
-- 🟢 Green: < 50%
-- 🟡 Yellow: 50–80%
-- 🔴 Red: > 80%
+No GTK, no tray icon, no XEmbed/SNI dependencies — works natively on Wayland (Sway, labwc, Hyprland, …) and X11 alike.
 
-Left-click the tray icon for a detail popup. Right-click for menu.
+### Data exposed
 
-### Local session stats
+| Key | Description |
+|---|---|
+| `session_pct` / `session_reset` | 5-hour session utilization and reset countdown |
+| `weekly_pct` / `weekly_reset` | 7-day weekly utilization and reset countdown |
+| `extra_pct` / `extra_used` / `extra_limit` / `extra_display` | Pay-as-you-go credits |
+| `session_tokens` / `tokens_per_min` / `session_duration` | Local Claude Code session throughput |
+| `today_tokens` | Total tokens across all local sessions today |
+| `error` | Set when the daemon hits an API error (e.g. expired cookie) |
 
-Reads your local Claude Code session files to show:
-- **Tokens used** in the active session
-- **Tokens per minute** throughput
-- **Today's total** across all sessions
+The daemon also reads your local Claude Code session JSONL files for the throughput stats, so those work even if the API call fails.
 
-### Conky integration
+## Conky integration
 
-Exports all data to `~/.config/claude-usage-widget/conky.txt` for use in [Conky](https://github.com/brndnmtthws/conky) dashboards. Add to your `conky.conf`:
+Add to your `conky.conf`:
 
 ```lua
 ${exec awk -F= '/^session_pct=/{print $2}' ~/.config/claude-usage-widget/conky.txt}%
@@ -38,35 +36,44 @@ ${exec awk -F= '/^extra_display=/{print $2}' ~/.config/claude-usage-widget/conky
 ${exec awk -F= '/^tokens_per_min=/{print $2}' ~/.config/claude-usage-widget/conky.txt}/min
 ```
 
-Available keys: `session_pct`, `session_reset`, `weekly_pct`, `weekly_reset`, `extra_pct`, `extra_used`, `extra_limit`, `extra_display`, `session_tokens`, `tokens_per_min`, `session_duration`, `today_tokens`.
+## Waybar integration
+
+Add a custom module to `~/.config/waybar/config`:
+
+```jsonc
+"modules-right": ["custom/claude", /* ... */],
+
+"custom/claude": {
+    "exec": "~/.config/waybar/claude-status.sh",
+    "return-type": "json",
+    "interval": 30,
+    "format": "\uf544 {}"
+}
+```
+
+The `\uf544` glyph is Font Awesome's "robot" — requires a Font Awesome (or Nerd Font) family in your Waybar style.
+
+Then `~/.config/waybar/claude-status.sh`:
+
+```sh
+#!/bin/sh
+awk -F= '
+/^session_pct=/{s=$2}
+/^weekly_pct=/{w=$2}
+/^extra_display=/{e=$2}
+/^session_tokens=/{t=$2}
+/^tokens_per_min=/{m=$2}
+END{
+  printf "{\"text\": \"%s%%\", \"tooltip\": \"Session: %s%%\\nWeekly: %s%%\\nExtra: %s\\nTokens: %s (%s/min)\"}", s, s, w, e, t, m
+}' ~/.config/claude-usage-widget/conky.txt 2>/dev/null
+```
+
+`chmod +x` it. Optional: add CSS class states (`ok`/`warning`/`critical`) by branching on `s` in the script and emitting a `class` field.
 
 ## Requirements
 
 - Python 3.8+
-- GTK 3 with GObject introspection (`python3-gi`, `python3-gi-cairo`)
-- A system tray (works with IceWM, LXQt, XFCE, MATE, KDE, etc.)
-
-### Install dependencies
-
-**Debian/Ubuntu:**
-```bash
-sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0
-```
-
-**Fedora:**
-```bash
-sudo dnf install python3-gobject python3-cairo
-```
-
-**Arch:**
-```bash
-sudo pacman -S python-gobject python-cairo
-```
-
-**Gentoo:**
-```bash
-sudo emerge dev-python/pygobject
-```
+- Standard library only — no GTK, no Cairo, no GObject
 
 ## Install
 
@@ -79,7 +86,7 @@ chmod +x setup.sh
 
 ## Cookie setup
 
-The widget reads your usage from the claude.ai API using a browser cookie.
+The daemon reads usage from the claude.ai API using a browser cookie.
 
 1. Open [claude.ai/settings/usage](https://claude.ai/settings/usage) in your browser
 2. Open DevTools (`F12`) → **Network** tab → reload the page
@@ -92,26 +99,19 @@ echo 'your-cookie-value' > ~/.config/claude-usage-widget/cookie
 chmod 600 ~/.config/claude-usage-widget/cookie
 ```
 
-> **Note:** The cookie expires periodically. When the icon turns red with an "Auth expired" tooltip, repeat the steps above to refresh it.
+> **Note:** The cookie expires periodically. When the daemon writes `error=Auth expired — update cookie` to `conky.txt`, repeat the steps above.
 
-## Usage
+## Signals
 
-```bash
-# Run directly
-claude-usage-widget
-
-# Or just log out and back in (autostart is set up by setup.sh)
-```
+- `SIGUSR1` → immediate refresh (skip the 60s wait)
+- `SIGTERM` → clean exit
 
 ## How it works
 
 - Calls `claude.ai/api/organizations/{org_id}/usage` every 60 seconds
 - Auto-detects your organization ID on first run
 - Reads local Claude Code session JSONL files for token throughput stats
-- Renders a color-coded icon with the session (5h) utilization percentage
-- Click popup shows all limits with progress bars and reset countdowns
-- Writes `conky.txt` for desktop dashboard integration
-- Zero external dependencies beyond GTK3
+- Atomically writes `~/.config/claude-usage-widget/conky.txt` (tmp + rename, so readers never see a half-written file)
 
 ## Security
 

@@ -26,7 +26,7 @@ cat > "$DESKTOP_FILE" << 'EOF'
 [Desktop Entry]
 Type=Application
 Name=Claude Usage Widget
-Comment=System tray widget showing Claude AI usage limits
+Comment=Daemon that writes Claude AI usage to a file for desktop dashboards
 Exec=claude-usage-widget
 Icon=utilities-system-monitor
 Terminal=false
