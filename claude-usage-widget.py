@@ -199,10 +199,14 @@ class UsageDaemon:
                 lines["weekly_reset"] = format_reset(seven.get("resets_at"))
             extra = d.get("extra_usage")
             if extra and extra.get("is_enabled"):
-                lines["extra_pct"] = f"{extra['utilization']:.0f}"
-                lines["extra_used"] = f"{extra['used_credits'] / 100:.0f}"
-                lines["extra_limit"] = f"{extra['monthly_limit'] / 100:.0f}"
-                lines["extra_display"] = f"${extra['used_credits'] / 100:.0f}/${extra['monthly_limit'] / 100:.0f}"
+                util = extra.get("utilization")
+                used = (extra.get("used_credits") or 0) / 100
+                limit = (extra.get("monthly_limit") or 0) / 100
+                sym = {"EUR": "€", "USD": "$", "GBP": "£"}.get(extra.get("currency"), "$")
+                lines["extra_pct"] = f"{util:.0f}" if util is not None else f"{(used / limit * 100) if limit else 0:.0f}"
+                lines["extra_used"] = f"{used:.0f}"
+                lines["extra_limit"] = f"{limit:.0f}"
+                lines["extra_display"] = f"{sym}{used:.0f}/{sym}{limit:.0f}"
 
         if self.local_data:
             sess = self.local_data.get("active_session")
