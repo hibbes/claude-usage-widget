@@ -8,7 +8,9 @@ Headless daemon that fetches your [Claude AI](https://claude.ai) usage limits an
 
 ## What it does
 
-A small Python daemon polls `claude.ai/api/organizations/{org_id}/usage` every 60 seconds and writes key=value pairs to `~/.config/claude-usage-widget/conky.txt`. Your desktop bar or Conky panel reads that file and displays the values however you like.
+A small Python daemon polls Anthropic's OAuth usage endpoint (`api.anthropic.com/api/oauth/usage`) every 60 seconds and writes key=value pairs to `~/.config/claude-usage-widget/conky.txt`. Your desktop bar or Conky panel reads that file and displays the values however you like.
+
+Authentication reuses Claude Code's own OAuth token from `~/.claude/.credentials.json`, which Claude Code keeps auto-refreshed, so there is no cookie to paste and nothing to renew by hand.
 
 No GTK, no tray icon, no XEmbed/SNI dependencies — works natively on Wayland (Sway, labwc, Hyprland, …) and X11 alike.
 
@@ -21,7 +23,7 @@ No GTK, no tray icon, no XEmbed/SNI dependencies — works natively on Wayland (
 | `extra_pct` / `extra_used` / `extra_limit` / `extra_display` | Pay-as-you-go credits |
 | `session_tokens` / `tokens_per_min` / `session_duration` | Local Claude Code session throughput |
 | `today_tokens` | Total tokens across all local sessions today |
-| `error` | Set when the daemon hits an API error (e.g. expired cookie) |
+| `error` | Set when the daemon hits an API error (e.g. expired login) |
 
 The daemon also reads your local Claude Code session JSONL files for the throughput stats, so those work even if the API call fails.
 
@@ -84,22 +86,32 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-## Cookie setup
+## Authentication
 
-The daemon reads usage from the claude.ai API using a browser cookie.
+The daemon reuses **Claude Code's** OAuth token, so there is nothing to set up
+beyond having logged in to Claude Code at least once:
 
-1. Open [claude.ai/settings/usage](https://claude.ai/settings/usage) in your browser
-2. Open DevTools (`F12`) → **Network** tab → reload the page
-3. Click on the `usage` request → **Headers** tab
-4. Copy the full `Cookie` header value
-5. Save it:
+```bash
+claude        # run it once; /login if prompted
+```
+
+This creates `~/.claude/.credentials.json`. Claude Code keeps the token
+refreshed in place; the daemon re-reads it every cycle, so it never goes stale
+while you use Claude Code.
+
+### Legacy cookie fallback (optional)
+
+If `~/.claude/.credentials.json` is absent, the daemon falls back to the old
+claude.ai browser-cookie method. Grab the `Cookie` header from
+[claude.ai/settings/usage](https://claude.ai/settings/usage) via DevTools and
+save it:
 
 ```bash
 echo 'your-cookie-value' > ~/.config/claude-usage-widget/cookie
 chmod 600 ~/.config/claude-usage-widget/cookie
 ```
 
-> **Note:** The cookie expires periodically. When the daemon writes `error=Auth expired — update cookie` to `conky.txt`, repeat the steps above.
+This cookie expires periodically; the OAuth token does not, so prefer it.
 
 ## Signals
 
@@ -108,16 +120,17 @@ chmod 600 ~/.config/claude-usage-widget/cookie
 
 ## How it works
 
-- Calls `claude.ai/api/organizations/{org_id}/usage` every 60 seconds
-- Auto-detects your organization ID on first run
+- Calls `api.anthropic.com/api/oauth/usage` every 60 seconds with Claude Code's OAuth bearer token
+- Re-reads `~/.claude/.credentials.json` each cycle, so token refreshes are picked up automatically
+- Falls back to the claude.ai cookie endpoint only if no Claude Code token is present
 - Reads local Claude Code session JSONL files for token throughput stats
 - Atomically writes `~/.config/claude-usage-widget/conky.txt` (tmp + rename, so readers never see a half-written file)
 
 ## Security
 
-- Cookie is stored in `~/.config/claude-usage-widget/cookie` with `600` permissions
-- Cookie file is in `.gitignore` — never committed
-- No data is sent anywhere except to `claude.ai`
+- The OAuth token is read (never written) from Claude Code's own `~/.claude/.credentials.json`; no credentials are copied or stored by this tool
+- The optional fallback cookie lives in `~/.config/claude-usage-widget/cookie` with `600` permissions and is in `.gitignore`, never committed
+- No data is sent anywhere except to `api.anthropic.com` (and `claude.ai` for the legacy fallback)
 
 ## License
 

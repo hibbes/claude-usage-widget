@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""claude-usage-widget — daemon that writes Claude AI usage to conky.txt.
+"""claude-usage-widget: daemon that writes Claude usage to conky.txt.
+
+Usage data comes from Claude Code's own OAuth token
+(~/.claude/.credentials.json), which Claude Code keeps auto-refreshed, via
+https://api.anthropic.com/api/oauth/usage. No browser cookie needed; an
+optional claude.ai cookie is used only as a legacy fallback.
 
 Native Wayland: no GTK, no tray icon. Display is handled by the Waybar
 custom/claude module (~/.config/waybar-labwc/claude-status.sh) and conky,
@@ -19,7 +24,9 @@ CONFIG_DIR = Path.home() / ".config" / "claude-usage-widget"
 COOKIE_FILE = CONFIG_DIR / "cookie"
 CONKY_FILE = CONFIG_DIR / "conky.txt"
 CLAUDE_DIR = Path.home() / ".claude"
+CREDENTIALS_FILE = CLAUDE_DIR / ".credentials.json"
 REFRESH_SECONDS = 60
+OAUTH_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 API_BASE = "https://claude.ai/api"
 USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -131,41 +138,66 @@ class UsageDaemon:
         self.error_msg = None
         self.local_data = None
 
+    @staticmethod
+    def read_oauth_token():
+        """Read Claude Code's OAuth access token. Claude Code keeps it
+        refreshed in place, so we re-read it every cycle (never cache)."""
+        try:
+            data = json.loads(CREDENTIALS_FILE.read_text())
+        except (OSError, json.JSONDecodeError):
+            return None
+        return (data.get("claudeAiOauth") or {}).get("accessToken") or None
+
     def read_cookie(self):
         if not COOKIE_FILE.exists():
-            self.error_msg = f"Cookie file not found: {COOKIE_FILE}"
             return None
-        cookie = COOKIE_FILE.read_text().strip()
-        if not cookie:
-            self.error_msg = "Cookie file is empty"
-            return None
-        return cookie
+        return COOKIE_FILE.read_text().strip() or None
 
-    def api_request(self, path):
-        cookie = self.read_cookie()
-        if not cookie:
-            return None
-        req = urllib.request.Request(f"{API_BASE}/{path}")
-        req.add_header("Cookie", cookie)
-        req.add_header("User-Agent", USER_AGENT)
-        req.add_header("Accept", "application/json")
-        req.add_header("Referer", "https://claude.ai/settings/usage")
+    @staticmethod
+    def _get_json(url, headers):
+        req = urllib.request.Request(url)
+        for key, value in headers.items():
+            req.add_header(key, value)
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read())
 
-    def fetch_org_id(self):
-        orgs = self.api_request("organizations")
-        if orgs:
-            return orgs[0]["uuid"]
-        return None
+    def fetch_usage_oauth(self, token):
+        return self._get_json(OAUTH_USAGE_URL, {
+            "Authorization": f"Bearer {token}",
+            "anthropic-version": "2023-06-01",
+            "anthropic-beta": "oauth-2025-04-20",
+            "Accept": "application/json",
+            "User-Agent": "claude-usage-widget",
+        })
+
+    def fetch_usage_cookie(self):
+        """Legacy fallback: claude.ai web API via browser cookie."""
+        cookie = self.read_cookie()
+        if not cookie:
+            return None
+        headers = {
+            "Cookie": cookie,
+            "User-Agent": USER_AGENT,
+            "Accept": "application/json",
+            "Referer": "https://claude.ai/settings/usage",
+        }
+        if not self.org_id:
+            orgs = self._get_json(f"{API_BASE}/organizations", headers)
+            self.org_id = orgs[0]["uuid"] if orgs else None
+        if not self.org_id:
+            return None
+        return self._get_json(
+            f"{API_BASE}/organizations/{self.org_id}/usage", headers
+        )
 
     def fetch_usage(self):
-        if not self.org_id:
-            self.org_id = self.fetch_org_id()
-        if not self.org_id:
-            self.error_msg = "Could not determine organization ID"
-            return None
-        return self.api_request(f"organizations/{self.org_id}/usage")
+        token = self.read_oauth_token()
+        if token:
+            return self.fetch_usage_oauth(token)
+        data = self.fetch_usage_cookie()
+        if data is None:
+            self.error_msg = "Not logged in to Claude Code and no cookie"
+        return data
 
     def refresh(self):
         try:
@@ -174,7 +206,10 @@ class UsageDaemon:
                 self.usage_data = data
                 self.error_msg = None
         except urllib.error.HTTPError as e:
-            self.error_msg = "Auth expired — update cookie" if e.code == 403 else f"HTTP {e.code}"
+            if e.code in (401, 403):
+                self.error_msg = "Auth expired, run `claude` to refresh login"
+            else:
+                self.error_msg = f"HTTP {e.code}"
         except Exception as e:
             self.error_msg = str(e)
 
@@ -231,28 +266,28 @@ class UsageDaemon:
             time.sleep(REFRESH_SECONDS)
 
 
-def setup_cookie():
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    print("claude-usage-widget — First-time setup")
+def print_setup_help():
+    print("claude-usage-widget setup")
     print("=" * 40)
     print()
-    print("To show your Claude usage, this daemon needs a browser cookie.")
+    print("This widget reads your Claude usage from Claude Code's own")
+    print("auto-refreshed OAuth token at:")
+    print(f"  {CREDENTIALS_FILE}")
     print()
-    print("Steps:")
-    print("  1. Open https://claude.ai/settings/usage in your browser")
-    print("  2. Open DevTools (F12) -> Network tab -> reload the page")
-    print("  3. Click on the 'usage' request -> Headers tab")
-    print("  4. Copy the full 'Cookie' header value")
-    print(f"  5. Paste it into: {COOKIE_FILE}")
+    print("That file appears once you have logged in to Claude Code:")
+    print("  claude        # run it once, /login if prompted")
     print()
-    print(f"  Example: echo 'your-cookie-here' > \"{COOKIE_FILE}\"")
-    print(f"           chmod 600 \"{COOKIE_FILE}\"")
-    sys.exit(1)
+    print("Then just start this daemon; no browser or cookie required.")
+    print()
+    print("Optional legacy fallback: a claude.ai 'Cookie' header value at")
+    print(f"  {COOKIE_FILE}")
 
 
 def main():
-    if not COOKIE_FILE.exists():
-        setup_cookie()
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    if not UsageDaemon.read_oauth_token() and not COOKIE_FILE.exists():
+        print_setup_help()
+        sys.exit(1)
     UsageDaemon().run()
 
 
