@@ -8,7 +8,7 @@ Headless daemon that fetches your [Claude AI](https://claude.ai) usage limits an
 
 ## What it does
 
-A small Python daemon polls Anthropic's OAuth usage endpoint (`api.anthropic.com/api/oauth/usage`) every 60 seconds and writes key=value pairs to `~/.config/claude-usage-widget/conky.txt`. Your desktop bar or Conky panel reads that file and displays the values however you like.
+A small Python daemon polls Anthropic's OAuth usage endpoint (`api.anthropic.com/api/oauth/usage`) every few minutes and writes key=value pairs to `~/.config/claude-usage-widget/conky.txt`. Your desktop bar or Conky panel reads that file and displays the values however you like.
 
 Authentication reuses Claude Code's own OAuth token from `~/.claude/.credentials.json`, which Claude Code keeps auto-refreshed, so there is no cookie to paste and nothing to renew by hand.
 
@@ -120,8 +120,9 @@ This cookie expires periodically; the OAuth token does not, so prefer it.
 
 ## How it works
 
-- Calls `api.anthropic.com/api/oauth/usage` every 60 seconds with Claude Code's OAuth bearer token
-- Re-reads `~/.claude/.credentials.json` each cycle, so token refreshes are picked up automatically
+- Calls `api.anthropic.com/api/oauth/usage` every 5 minutes (rate-limit friendly) with Claude Code's OAuth bearer token, and refreshes local token-throughput stats every 60 seconds
+- On a transient `429 Too Many Requests`, keeps the last good numbers on the bar instead of blanking
+- Re-reads `~/.claude/.credentials.json` on each API call, so token refreshes are picked up automatically
 - Falls back to the claude.ai cookie endpoint only if no Claude Code token is present
 - Reads local Claude Code session JSONL files for token throughput stats
 - Atomically writes `~/.config/claude-usage-widget/conky.txt` (tmp + rename, so readers never see a half-written file)

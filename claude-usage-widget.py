@@ -25,7 +25,8 @@ COOKIE_FILE = CONFIG_DIR / "cookie"
 CONKY_FILE = CONFIG_DIR / "conky.txt"
 CLAUDE_DIR = Path.home() / ".claude"
 CREDENTIALS_FILE = CLAUDE_DIR / ".credentials.json"
-REFRESH_SECONDS = 60
+REFRESH_SECONDS = 60  # local-stats / conky-write cadence
+API_INTERVAL_SECONDS = 300  # min seconds between calls to the rate-limited usage API
 OAUTH_USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 API_BASE = "https://claude.ai/api"
 USER_AGENT = (
@@ -199,19 +200,25 @@ class UsageDaemon:
             self.error_msg = "Not logged in to Claude Code and no cookie"
         return data
 
-    def refresh(self):
-        try:
-            data = self.fetch_usage()
-            if data:
-                self.usage_data = data
-                self.error_msg = None
-        except urllib.error.HTTPError as e:
-            if e.code in (401, 403):
-                self.error_msg = "Auth expired, run `claude` to refresh login"
-            else:
-                self.error_msg = f"HTTP {e.code}"
-        except Exception as e:
-            self.error_msg = str(e)
+    def refresh(self, fetch_api=True):
+        if fetch_api:
+            try:
+                data = self.fetch_usage()
+                if data:
+                    self.usage_data = data
+                    self.error_msg = None
+            except urllib.error.HTTPError as e:
+                if e.code in (401, 403):
+                    self.error_msg = "Auth expired, run `claude` to refresh login"
+                elif e.code == 429:
+                    # Rate limited: transient. Keep the last good numbers on the
+                    # bar instead of blanking; only flag it if we have nothing yet.
+                    self.error_msg = None if self.usage_data else "Rate limited"
+                else:
+                    self.error_msg = f"HTTP {e.code}"
+            except Exception as e:
+                # Network blip etc.: keep the last good numbers if we have them.
+                self.error_msg = None if self.usage_data else str(e)
 
         try:
             self.local_data = read_local_sessions()
@@ -259,10 +266,17 @@ class UsageDaemon:
         tmp.replace(CONKY_FILE)
 
     def run(self):
-        signal.signal(signal.SIGUSR1, lambda *_: self.refresh())
+        signal.signal(signal.SIGUSR1, lambda *_: self.refresh(fetch_api=True))
         signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+        last_api = 0.0
         while True:
-            self.refresh()
+            now = time.monotonic()
+            # Poll often until we have data, then throttle to spare the rate limit.
+            interval = API_INTERVAL_SECONDS if self.usage_data else REFRESH_SECONDS
+            do_api = (now - last_api) >= interval
+            if do_api:
+                last_api = now
+            self.refresh(fetch_api=do_api)
             time.sleep(REFRESH_SECONDS)
 
 
