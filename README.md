@@ -121,7 +121,7 @@ This cookie expires periodically; the OAuth token does not, so prefer it.
 ## How it works
 
 - Calls `api.anthropic.com/api/oauth/usage` every 5 minutes (rate-limit friendly) with Claude Code's OAuth bearer token, and refreshes local token-throughput stats every 60 seconds
-- On a transient `429 Too Many Requests`, keeps the last good numbers on the bar instead of blanking
+- On any transient API error (429, 500, 529, brief auth-refresh blips), keeps the last good numbers on the bar instead of blanking; a dash appears only when there is no data at all (cold start or sustained outage)
 - Re-reads `~/.claude/.credentials.json` on each API call, so token refreshes are picked up automatically
 - Falls back to the claude.ai cookie endpoint only if no Claude Code token is present
 - Reads local Claude Code session JSONL files for token throughput stats

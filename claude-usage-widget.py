@@ -208,16 +208,19 @@ class UsageDaemon:
                     self.usage_data = data
                     self.error_msg = None
             except urllib.error.HTTPError as e:
-                if e.code in (401, 403):
+                # An error is only worth surfacing when we have nothing else to
+                # show. With prior data we keep the last good numbers and emit no
+                # error line, so the Waybar module matches conky and never
+                # flickers to a dash on a transient 429 / 500 / 529 / refresh blip.
+                if self.usage_data:
+                    self.error_msg = None
+                elif e.code in (401, 403):
                     self.error_msg = "Auth expired, run `claude` to refresh login"
                 elif e.code == 429:
-                    # Rate limited: transient. Keep the last good numbers on the
-                    # bar instead of blanking; only flag it if we have nothing yet.
-                    self.error_msg = None if self.usage_data else "Rate limited"
+                    self.error_msg = "Rate limited"
                 else:
                     self.error_msg = f"HTTP {e.code}"
             except Exception as e:
-                # Network blip etc.: keep the last good numbers if we have them.
                 self.error_msg = None if self.usage_data else str(e)
 
         try:
