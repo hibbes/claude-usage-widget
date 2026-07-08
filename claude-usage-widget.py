@@ -249,16 +249,31 @@ class UsageDaemon:
                 # disabled_reason "out_of_credits") the numbers are still
                 # meaningful; suppressing the whole block left conky with a blank
                 # "Extra:" line and an empty bar. A trailing "(off)" marks the
-                # disabled state; extra_enabled lets readers branch if they want.
+                # disabled state; extra_enabled/extra_reason let readers branch.
                 enabled = bool(extra.get("is_enabled"))
+                reason = extra.get("disabled_reason")
                 util = extra.get("utilization")
                 used = (extra.get("used_credits") or 0) / 100
                 limit = (extra.get("monthly_limit") or 0) / 100
                 sym = {"EUR": "€", "USD": "$", "GBP": "£"}.get(extra.get("currency"), "$")
-                lines["extra_pct"] = f"{util:.0f}" if util is not None else f"{(used / limit * 100) if limit else 0:.0f}"
+                # The bar shows how close you are to the extra-usage wall. Normally
+                # that is utilization of the monthly cap. The API does not expose the
+                # prepaid credit balance (spend.balance is null), so a true "share of
+                # available credit" can't be derived — but when the pool is exhausted
+                # (disabled_reason "out_of_credits") it is provably fully spent, so
+                # peg the bar to 100% instead of the misleading cap utilization.
+                if not enabled and reason == "out_of_credits":
+                    pct = 100.0
+                elif util is not None:
+                    pct = util
+                else:
+                    pct = (used / limit * 100) if limit else 0
+                lines["extra_pct"] = f"{pct:.0f}"
                 lines["extra_used"] = f"{used:.0f}"
                 lines["extra_limit"] = f"{limit:.0f}"
                 lines["extra_enabled"] = "1" if enabled else "0"
+                if not enabled and reason:
+                    lines["extra_reason"] = reason
                 lines["extra_display"] = (
                     f"{sym}{used:.0f}/{sym}{limit:.0f}" + ("" if enabled else " (off)")
                 )
