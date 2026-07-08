@@ -20,7 +20,7 @@ No GTK, no tray icon, no XEmbed/SNI dependencies — works natively on Wayland (
 |---|---|
 | `session_pct` / `session_reset` | 5-hour session utilization and reset countdown |
 | `weekly_pct` / `weekly_reset` | 7-day weekly utilization and reset countdown |
-| `extra_pct` / `extra_used` / `extra_limit` / `extra_display` | Pay-as-you-go credits |
+| `extra_pct` / `extra_used` / `extra_limit` / `extra_display` / `extra_enabled` | Pay-as-you-go credits; emitted even when extra usage is disabled (`extra_enabled=0`, and `extra_display` gets an `(off)` suffix) |
 | `session_tokens` / `tokens_per_min` / `session_duration` | Local Claude Code session throughput |
 | `today_tokens` | Total tokens across all local sessions today |
 | `error` | Set when the daemon hits an API error (e.g. expired login) |

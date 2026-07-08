@@ -243,7 +243,14 @@ class UsageDaemon:
                 lines["weekly_pct"] = f"{seven['utilization']:.0f}"
                 lines["weekly_reset"] = format_reset(seven.get("resets_at"))
             extra = d.get("extra_usage")
-            if extra and extra.get("is_enabled"):
+            if extra:
+                # Emit the block whether or not extra usage is currently
+                # enabled. When Anthropic disables it (e.g. is_enabled=false with
+                # disabled_reason "out_of_credits") the numbers are still
+                # meaningful; suppressing the whole block left conky with a blank
+                # "Extra:" line and an empty bar. A trailing "(off)" marks the
+                # disabled state; extra_enabled lets readers branch if they want.
+                enabled = bool(extra.get("is_enabled"))
                 util = extra.get("utilization")
                 used = (extra.get("used_credits") or 0) / 100
                 limit = (extra.get("monthly_limit") or 0) / 100
@@ -251,7 +258,10 @@ class UsageDaemon:
                 lines["extra_pct"] = f"{util:.0f}" if util is not None else f"{(used / limit * 100) if limit else 0:.0f}"
                 lines["extra_used"] = f"{used:.0f}"
                 lines["extra_limit"] = f"{limit:.0f}"
-                lines["extra_display"] = f"{sym}{used:.0f}/{sym}{limit:.0f}"
+                lines["extra_enabled"] = "1" if enabled else "0"
+                lines["extra_display"] = (
+                    f"{sym}{used:.0f}/{sym}{limit:.0f}" + ("" if enabled else " (off)")
+                )
 
         if self.local_data:
             sess = self.local_data.get("active_session")
