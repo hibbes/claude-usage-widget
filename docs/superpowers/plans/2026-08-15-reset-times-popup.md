@@ -32,7 +32,7 @@
 - Consumes: `~/.config/claude-usage-widget/conky.txt` key=value lines; keys `session_pct`, `weekly_pct`, `session_resets_at`, `weekly_resets_at`, `error`.
 - Produces: executable `claude-reset-popup.sh [--print]`; env overrides `CLAUDE_USAGE_FILE`, `CLAUDE_USAGE_NOW`. Task 3 wires this path into Waybar.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Write `~/.config/waybar-labwc/test-claude-reset-popup.sh`:
 
@@ -127,12 +127,12 @@ printf '%d passed, %d failed\n' "$pass" "$fail"
 
 Then `chmod +x` it.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `~/.config/waybar-labwc/test-claude-reset-popup.sh`
 Expected: FAILs (script missing, `sh` cannot open it), summary line shows `0 passed, 10 failed`, exit code 1.
 
-- [ ] **Step 3: Write the script**
+- [x] **Step 3: Write the script**
 
 Write `~/.config/waybar-labwc/claude-reset-popup.sh`:
 
@@ -231,7 +231,7 @@ show "$body"
 
 Then `chmod +x` it.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `~/.config/waybar-labwc/test-claude-reset-popup.sh`
 Expected: `10 passed, 0 failed`, exit code 0. Also run `sh -n` on both files as a syntax gate.
@@ -250,7 +250,7 @@ Expected: `10 passed, 0 failed`, exit code 0. Also run `sh -n` on both files as 
 - Consumes: `five_hour.resets_at` / `seven_day.resets_at` from the OAuth usage API response (ISO 8601 strings).
 - Produces: `session_resets_at=` and `weekly_resets_at=` lines in `conky.txt`, exactly the keys Task 1's script reads.
 
-- [ ] **Step 1: Extend write_conky**
+- [x] **Step 1: Extend write_conky**
 
 In `write_conky`, change the two blocks to:
 
@@ -269,12 +269,12 @@ In `write_conky`, change the two blocks to:
                     lines["weekly_resets_at"] = seven["resets_at"]
 ```
 
-- [ ] **Step 2: Syntax gate**
+- [x] **Step 2: Syntax gate**
 
 Run: `python3 -m py_compile /home/neo/claude-usage-widget/claude-usage-widget.py && echo OK`
 Expected: `OK`.
 
-- [ ] **Step 3: Document the keys in README**
+- [x] **Step 3: Document the keys in README**
 
 Find the section of `README.md` that lists the `conky.txt` keys (it mentions `session_reset`, `weekly_reset` etc.) and add, matching the surrounding format:
 
@@ -284,7 +284,7 @@ returned by the API (only present after a successful fetch). Lets consumers
 compute absolute local times, e.g. a Waybar on-click reset popup.
 ```
 
-- [ ] **Step 4: Deploy the daemon (soft restart)**
+- [x] **Step 4: Deploy the daemon (soft restart)**
 
 ```bash
 pkill -f 'claude-usage-widget[.]py'
@@ -295,7 +295,7 @@ pgrep -af 'claude-usage-widget[.]py'
 
 Expected: exactly one new PID running `/home/neo/claude-usage-widget/claude-usage-widget.py`.
 
-- [ ] **Step 5: Verify live data**
+- [x] **Step 5: Verify live data**
 
 ```bash
 sleep 8
@@ -306,7 +306,7 @@ Expected: both `session_resets_at=` and `weekly_resets_at=` with ISO timestamps.
 
 Also confirm the old consumers still parse: `~/.config/waybar-labwc/claude-status.sh` outputs JSON with the same percentages as `conky.txt`.
 
-- [ ] **Step 6: Commit and push**
+- [x] **Step 6: Commit and push**
 
 ```bash
 cd /home/neo/claude-usage-widget
@@ -333,7 +333,7 @@ git push
 - Consumes: `~/.config/waybar-labwc/claude-reset-popup.sh` from Task 1.
 - Produces: user-visible click behavior; nothing downstream.
 
-- [ ] **Step 1: Add the click handler**
+- [x] **Step 1: Add the click handler**
 
 Insert ONLY the `on-click` line into the existing `custom/claude` block. All
 other lines stay byte-identical; in the real config the robot glyph is the
@@ -350,12 +350,12 @@ Result (glyph shown literally here):
     }
 ```
 
-- [ ] **Step 2: Validate JSON**
+- [x] **Step 2: Validate JSON**
 
 Run: `python3 -m json.tool ~/.config/waybar-labwc/config >/dev/null && echo OK`
 Expected: `OK`.
 
-- [ ] **Step 3: Restart Waybar (soft restart, config has no live reload wired)**
+- [x] **Step 3: Restart Waybar (soft restart, config has no live reload wired)**
 
 ```bash
 pkill -x waybar
@@ -367,7 +367,7 @@ pgrep -x waybar
 
 Expected: one waybar PID, still alive after the sleep (no crash loop). If `WAYLAND_DISPLAY`/`XDG_RUNTIME_DIR` are missing in the shell, export them first (`WAYLAND_DISPLAY=wayland-0`, `XDG_RUNTIME_DIR=/run/user/1000`).
 
-- [ ] **Step 4: End-to-end notification check**
+- [x] **Step 4: End-to-end notification check**
 
 ```bash
 ~/.config/waybar-labwc/claude-reset-popup.sh --print
@@ -377,7 +377,7 @@ makoctl list | grep -A2 'Claude-Limits'
 
 Expected: `--print` shows two lines with real current data (absolute time + remaining); the real invocation pops a mako notification; `makoctl list` shows it. A `grim` screenshot of the bar area may additionally confirm waybar is rendering.
 
-- [ ] **Step 5: Tick plan checkboxes, commit plan updates**
+- [x] **Step 5: Tick plan checkboxes, commit plan updates**
 
 ```bash
 cd /home/neo/claude-usage-widget
