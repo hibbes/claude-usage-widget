@@ -238,10 +238,14 @@ class UsageDaemon:
             if five:
                 lines["session_pct"] = f"{five['utilization']:.0f}"
                 lines["session_reset"] = format_reset(five.get("resets_at"))
+                if five.get("resets_at"):
+                    lines["session_resets_at"] = five["resets_at"]
             seven = d.get("seven_day")
             if seven:
                 lines["weekly_pct"] = f"{seven['utilization']:.0f}"
                 lines["weekly_reset"] = format_reset(seven.get("resets_at"))
+                if seven.get("resets_at"):
+                    lines["weekly_resets_at"] = seven["resets_at"]
             extra = d.get("extra_usage")
             if extra:
                 # Emit the block whether or not extra usage is currently

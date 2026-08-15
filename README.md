@@ -20,6 +20,7 @@ No GTK, no tray icon, no XEmbed/SNI dependencies — works natively on Wayland (
 |---|---|
 | `session_pct` / `session_reset` | 5-hour session utilization and reset countdown |
 | `weekly_pct` / `weekly_reset` | 7-day weekly utilization and reset countdown |
+| `session_resets_at` / `weekly_resets_at` | Raw ISO 8601 reset timestamps as returned by the API (only present after a successful fetch). Lets consumers compute absolute local reset times, e.g. for an on-click popup showing "resets today at 15:33" |
 | `extra_pct` / `extra_used` / `extra_limit` / `extra_display` / `extra_enabled` / `extra_reason` | Pay-as-you-go extra usage. Emitted even when disabled: `extra_enabled=0`, `extra_display` gains an `(off)` suffix, and `extra_reason` carries the API's `disabled_reason`. `extra_pct` is utilization of the monthly cap, but pegs to `100` when the credit pool is exhausted (`out_of_credits`), since the bar then means "fully spent". |
 | `session_tokens` / `tokens_per_min` / `session_duration` | Local Claude Code session throughput |
 | `today_tokens` | Total tokens across all local sessions today |
