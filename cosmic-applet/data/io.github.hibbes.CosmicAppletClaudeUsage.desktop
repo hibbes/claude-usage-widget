@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Claude Usage
+Comment=Claude session and weekly usage in the COSMIC panel
+Type=Application
+Exec=cosmic-applet-claude-usage
+Terminal=false
+Categories=COSMIC;
+Keywords=COSMIC;Applet;Claude;Usage;
+Icon=io.github.hibbes.CosmicAppletClaudeUsage-symbolic
+NoDisplay=true
+X-CosmicApplet=true
+X-CosmicHoverPopup=Auto
+X-OverflowPriority=10

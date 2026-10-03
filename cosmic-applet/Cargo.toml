@@ -1,0 +1,23 @@
+[package]
+name = "cosmic-applet-claude-usage"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "COSMIC panel applet showing Claude usage from claude-usage-widget"
+
+[dependencies]
+jiff = "0.2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dependencies.libcosmic]
+git = "https://github.com/pop-os/libcosmic"
+# Same revision cosmic-applets 1.9.0 builds against; bump together with COSMIC.
+rev = "03c8f93b294ad239ea935f6dd3c14a15acde8d0d"
+default-features = false
+features = ["applet", "tokio", "wayland", "winit"]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+panic = "abort"

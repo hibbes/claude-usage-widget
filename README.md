@@ -12,7 +12,7 @@ A small Python daemon polls Anthropic's OAuth usage endpoint (`api.anthropic.com
 
 Authentication reuses Claude Code's own OAuth token from `~/.claude/.credentials.json`, which Claude Code keeps auto-refreshed, so there is no cookie to paste and nothing to renew by hand.
 
-No GTK, no tray icon, no XEmbed/SNI dependencies — works natively on Wayland (Sway, labwc, Hyprland, …) and X11 alike.
+No GTK, no tray icon, no XEmbed/SNI dependencies — works natively on Wayland (Sway, labwc, Hyprland, …) and X11 alike. On COSMIC an optional native panel applet shows the values (see below).
 
 ### Data exposed
 
@@ -72,6 +72,32 @@ END{
 ```
 
 `chmod +x` it. Optional: add CSS class states (`ok`/`warning`/`critical`) by branching on `s` in the script and emitting a `class` field.
+
+## COSMIC panel applet
+
+On the [COSMIC desktop](https://system76.com/cosmic) the values can live natively in the panel instead of a separate bar. `cosmic-applet/` contains a small Rust applet built on libcosmic, the same toolkit the stock COSMIC applets use. It only reads `conky.txt`; the Python daemon still does the fetching.
+
+- **Panel:** robot icon plus the session percentage. A trailing `?` means the data is older than 10 minutes, i.e. the daemon is not running.
+- **Popup (click):** progress bars for session and weekly usage with reset times (relative and local clock time), extra usage, tokens today and tokens per minute, plus how old the data is.
+
+Build and install for the current user (needs Rust and a COSMIC session; the first build downloads libcosmic and takes a few minutes):
+
+```bash
+cosmic-applet/install.sh
+```
+
+Then add **Claude Usage** in COSMIC Settings > Desktop > Panel > Configure panel applets. Or put the ID into the panel config directly, e.g. next to the clock in `~/.config/cosmic/com.system76.CosmicPanel.Panel/v1/plugins_center`:
+
+```ron
+Some([
+    "com.system76.CosmicAppletTime",
+    "io.github.hibbes.CosmicAppletClaudeUsage",
+])
+```
+
+libcosmic is pinned to the revision cosmic-applets 1.9.0 builds against (`rev` in `cosmic-applet/Cargo.toml`). The applet is a separate process that talks to the panel over Wayland, so it keeps working across COSMIC updates; rebuild against a newer libcosmic only if it starts to look or behave wrong.
+
+COSMIC starts the XDG autostart entries in `~/.config/autostart`, so the daemon's `claude-usage-widget.desktop` from `setup.sh` also covers COSMIC.
 
 ## Requirements
 
